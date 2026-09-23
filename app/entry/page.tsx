@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import EntryForm, { type Game } from "./EntryForm";
 
 // Kickoff times are stored in UTC; everyone sees them in Eastern time.
 const kickoffFormat = new Intl.DateTimeFormat("en-US", {
@@ -48,43 +49,27 @@ export default async function EntryPage() {
     );
   }
 
-  // 3. The confidence range always matches the number of pool games.
-  const gameCount = games.length;
+  // 3. Format kickoff times here on the server, so every participant sees
+  //    Eastern time regardless of their own device's time zone.
+  const formGames: Game[] = games.map((game) => ({
+    id: game.id,
+    bowl_name: game.bowl_name,
+    kickoff_label: kickoffFormat.format(new Date(game.kickoff_at)),
+    tv_network: game.tv_network,
+    favorite_team: game.favorite_team,
+    underdog_team: game.underdog_team,
+    spread: Number(game.spread),
+  }));
 
   return (
-    <main style={{ maxWidth: 720, margin: "60px auto", padding: 24 }}>
+    <main style={{ maxWidth: 820, margin: "60px auto", padding: 24 }}>
       <h1>Your entry</h1>
       <p>
-        {gameCount} games in this year's pool. Each game gets a confidence value
-        from 1 to {gameCount}, and each number is used once.
+        {formGames.length} games in this year's pool. Put a confidence number
+        under the team you're taking. Each number from 1 to {formGames.length} is
+        used once.
       </p>
-
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "2px solid #ccc" }}>
-              <th style={{ padding: 8 }}>Bowl</th>
-              <th style={{ padding: 8 }}>Kickoff (ET)</th>
-              <th style={{ padding: 8 }}>TV</th>
-              <th style={{ padding: 8 }}>Favorite</th>
-              <th style={{ padding: 8 }}>Underdog</th>
-            </tr>
-          </thead>
-          <tbody>
-            {games.map((game) => (
-              <tr key={game.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: 8 }}>{game.bowl_name}</td>
-                <td style={{ padding: 8 }}>{kickoffFormat.format(new Date(game.kickoff_at))}</td>
-                <td style={{ padding: 8 }}>{game.tv_network ?? "TBD"}</td>
-                <td style={{ padding: 8 }}>
-                  {game.favorite_team} (-{game.spread})
-                </td>
-                <td style={{ padding: 8 }}>{game.underdog_team}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <EntryForm games={formGames} />
     </main>
   );
 }
