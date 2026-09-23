@@ -8,14 +8,17 @@ import type { Game, Pick, Side } from "@/lib/pool";
 type Props = {
   games: Game[];
   entryId: string | null; // null = a brand-new entry that hasn't been saved yet
-  initialLabel: string;
+  accountName: string; // the signed-in person's full name
+  initialEntrant: { forSomeoneElse: boolean; firstName: string; lastName: string };
   initialPicks: Record<string, Pick>;
   locked: boolean;
 };
 
-export default function EntryForm({ games, entryId, initialLabel, initialPicks, locked }: Props) {
+export default function EntryForm({ games, entryId, accountName, initialEntrant, initialPicks, locked }: Props) {
   const router = useRouter();
-  const [label, setLabel] = useState(initialLabel);
+  const [forSomeoneElse, setForSomeoneElse] = useState(initialEntrant.forSomeoneElse);
+  const [entrantFirst, setEntrantFirst] = useState(initialEntrant.firstName);
+  const [entrantLast, setEntrantLast] = useState(initialEntrant.lastName);
   const [picks, setPicks] = useState<Record<string, Pick>>(initialPicks);
   const [unsaved, setUnsaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,7 +72,9 @@ export default function EntryForm({ games, entryId, initialLabel, initialPicks, 
     const supabase = createClient();
     const { data, error } = await supabase.rpc("save_entry", {
       p_entry_id: entryId,
-      p_entry_label: label,
+      // Empty names mean "this entry is for me"; the database uses my account name.
+      p_entrant_first_name: forSomeoneElse ? entrantFirst : null,
+      p_entrant_last_name: forSomeoneElse ? entrantLast : null,
       p_picks: payload,
     });
 
@@ -148,18 +153,62 @@ export default function EntryForm({ games, entryId, initialLabel, initialPicks, 
 
   return (
     <>
-      <label style={{ display: "block", marginBottom: 16 }}>
-        Entry name
-        <input
-          value={label}
-          disabled={locked}
-          onChange={(e) => {
-            setLabel(e.target.value);
-            setUnsaved(true);
-          }}
-          style={{ display: "block", marginTop: 6, padding: 8, fontSize: 16, width: "100%", maxWidth: 320 }}
-        />
-      </label>
+      <fieldset disabled={locked} style={{ border: "1px solid #ddd", borderRadius: 6, padding: 12, marginBottom: 16 }}>
+        <legend>Who is this entry for?</legend>
+        <label style={{ display: "block", marginBottom: 6 }}>
+          <input
+            type="radio"
+            name="entrant"
+            checked={!forSomeoneElse}
+            onChange={() => {
+              setForSomeoneElse(false);
+              setUnsaved(true);
+            }}
+          />{" "}
+          Me ({accountName})
+        </label>
+        <label style={{ display: "block" }}>
+          <input
+            type="radio"
+            name="entrant"
+            checked={forSomeoneElse}
+            onChange={() => {
+              setForSomeoneElse(true);
+              setUnsaved(true);
+            }}
+          />{" "}
+          Someone else, such as a family member or pet
+        </label>
+
+        {forSomeoneElse && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
+            <label>
+              First name
+              <input
+                required
+                value={entrantFirst}
+                onChange={(e) => {
+                  setEntrantFirst(e.target.value);
+                  setUnsaved(true);
+                }}
+                style={{ display: "block", marginTop: 4, padding: 8, fontSize: 16 }}
+              />
+            </label>
+            <label>
+              Last name
+              <input
+                required
+                value={entrantLast}
+                onChange={(e) => {
+                  setEntrantLast(e.target.value);
+                  setUnsaved(true);
+                }}
+                style={{ display: "block", marginTop: 4, padding: 8, fontSize: 16 }}
+              />
+            </label>
+          </div>
+        )}
+      </fieldset>
 
       <p
         role="status"

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { requireNamedUser } from "@/lib/account";
 import { getPool, type Pick } from "@/lib/pool";
 import EntryForm from "../EntryForm";
 
@@ -13,11 +14,7 @@ export default async function EditEntryPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { created } = await searchParams;
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { fullName } = await requireNamedUser(supabase);
 
   const { games, locked, lockLabel } = await getPool(supabase);
 
@@ -25,11 +22,14 @@ export default async function EditEntryPage({ params, searchParams }: Props) {
   // so another user's entry id shows "not found" rather than their picks.
   const { data: entry } = await supabase
     .from("entries")
-    .select("id, entry_label, picks(game_id, team_picked, confidence_points)")
+    .select("id, entrant_first_name, entrant_last_name, picks(game_id, team_picked, confidence_points)")
     .eq("id", id)
     .maybeSingle();
 
   if (!entry) notFound();
+
+  // The generated label, e.g. "Sam Brown 2" or "Dillon Brown".
+  const { data: labelRow } = await supabase.from("entry_labels").select("label").eq("id", id).maybeSingle();
 
   // The database stores the team name; the form works in favorite/underdog.
   const initialPicks: Record<string, Pick> = {};
@@ -47,7 +47,7 @@ export default async function EditEntryPage({ params, searchParams }: Props) {
       <p>
         <Link href="/entry">← Your entries</Link>
       </p>
-      <h1>{entry.entry_label}</h1>
+      <h1>{labelRow?.label ?? "Entry"}</h1>
 
       {created && (
         <p role="status" style={{ color: "#1e6b34" }}>
@@ -64,7 +64,12 @@ export default async function EditEntryPage({ params, searchParams }: Props) {
       <EntryForm
         games={games}
         entryId={entry.id}
-        initialLabel={entry.entry_label}
+        accountName={fullName}
+        initialEntrant={{
+          forSomeoneElse: entry.entrant_first_name !== null,
+          firstName: entry.entrant_first_name ?? "",
+          lastName: entry.entrant_last_name ?? "",
+        }}
         initialPicks={initialPicks}
         locked={locked}
       />

@@ -7,7 +7,8 @@ export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     inviteCode: "",
-    displayName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     referredBy: "",
@@ -50,11 +51,21 @@ export default function SignupPage() {
           />
         </label>
         <label>
-          Your name
+          First name
           <input
             required
-            value={form.displayName}
-            onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+            autoComplete="given-name"
+            value={form.firstName}
+            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+          />
+        </label>
+        <label>
+          Last name
+          <input
+            required
+            autoComplete="family-name"
+            value={form.lastName}
+            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
           />
         </label>
         <label>

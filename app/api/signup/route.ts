@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
-  const { inviteCode, displayName, email, password, referredBy } =
+  const { inviteCode, firstName, lastName, email, password, referredBy } =
     await request.json();
 
-  if (!inviteCode || !displayName || !email || !password) {
-    return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+  // Trim first, so a name made only of spaces counts as missing.
+  const first = typeof firstName === "string" ? firstName.trim() : "";
+  const last = typeof lastName === "string" ? lastName.trim() : "";
+
+  if (!inviteCode || !first || !last || !email || !password) {
+    return NextResponse.json(
+      { error: "Invite code, first name, last name, email, and password are all required." },
+      { status: 400 }
+    );
   }
 
   const admin = createAdminClient();
@@ -50,7 +57,8 @@ export async function POST(request: Request) {
   //    profile before the user's session cookie is fully established.
   const { error: profileError } = await admin.from("profiles").insert({
     id: signUpData.user.id,
-    display_name: displayName,
+    first_name: first,
+    last_name: last,
     email,
     referred_by: referredBy || null,
   });
