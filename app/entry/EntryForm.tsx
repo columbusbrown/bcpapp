@@ -262,6 +262,9 @@ export default function EntryForm({ games, entryId, accountName, initialEntrant,
           {unsaved && !saving && (
             <span style={{ marginLeft: 12, color: "#8a5a00" }}>You have unsaved changes.</span>
           )}
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "#555" }}>
+            Entrants receive the daily bowl recap by email. You can unsubscribe from any   recap.
+          </p>
           {message && (
             <p role="alert" style={{ margin: "8px 0 0", color: message.isError ? "crimson" : "#1e6b34" }}>
               {message.text}
