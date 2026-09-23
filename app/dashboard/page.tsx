@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -15,8 +16,7 @@ export default async function DashboardPage() {
     <main style={{ maxWidth: 640, margin: "60px auto", padding: 24 }}>
       <h1>You're in.</h1>
       <p>
-        This is a placeholder. The entry/picks form (milestone 2), leaderboard
-        (milestone 4), and rooting index (milestone 5) land here next.
+        <Link href="/entry">Go to your entries</Link> to make or edit your picks.
       </p>
     </main>
   );

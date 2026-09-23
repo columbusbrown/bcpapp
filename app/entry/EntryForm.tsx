@@ -1,23 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase-browser";
+import type { Game, Pick, Side } from "@/lib/pool";
 
-export type Game = {
-  id: string;
-  bowl_name: string;
-  kickoff_label: string; // already formatted in Eastern time by the server
-  tv_network: string | null;
-  favorite_team: string;
-  underdog_team: string;
-  spread: number;
+type Props = {
+  games: Game[];
+  entryId: string | null; // null = a brand-new entry that hasn't been saved yet
+  initialLabel: string;
+  initialPicks: Record<string, Pick>;
+  locked: boolean;
 };
 
-type Side = "favorite" | "underdog";
-type Pick = { side: Side; points: number };
-
-export default function EntryForm({ games }: { games: Game[] }) {
-  // One entry per game that has a number assigned, keyed by game id.
-  const [picks, setPicks] = useState<Record<string, Pick>>({});
+export default function EntryForm({ games, entryId, initialLabel, initialPicks, locked }: Props) {
+  const router = useRouter();
+  const [label, setLabel] = useState(initialLabel);
+  const [picks, setPicks] = useState<Record<string, Pick>>(initialPicks);
+  const [unsaved, setUnsaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   const gameCount = games.length;
   const pointOptions = Array.from({ length: gameCount }, (_, i) => gameCount - i); // N down to 1
@@ -44,6 +46,55 @@ export default function EntryForm({ games }: { games: Game[] }) {
       }
       return next;
     });
+    setUnsaved(true);
+    setMessage(null);
+  }
+
+  async function save() {
+    setSaving(true);
+    setMessage(null);
+
+    // Translate "favorite/underdog" into the team name the database stores.
+    const payload = games
+      .filter((game) => picks[game.id])
+      .map((game) => {
+        const pick = picks[game.id];
+        return {
+          game_id: game.id,
+          team_picked: pick.side === "favorite" ? game.favorite_team : game.underdog_team,
+          confidence_points: pick.points,
+        };
+      });
+
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("save_entry", {
+      p_entry_id: entryId,
+      p_entry_label: label,
+      p_picks: payload,
+    });
+
+    setSaving(false);
+
+    if (error) {
+      // The database explains exactly which rule was broken.
+      setMessage({ text: error.message, isError: true });
+      return;
+    }
+
+    setUnsaved(false);
+    setMessage({
+      text: isComplete
+        ? "Saved. This entry is complete. You can keep editing until the first kickoff."
+        : `Saved as a draft: ${pickedCount} of ${gameCount} games picked. Finish before the first kickoff.`,
+      isError: false,
+    });
+
+    // A brand-new entry now has an id, so move to its own page.
+    // Later saves then update this entry instead of creating another one.
+    if (!entryId && data) {
+      router.replace(`/entry/${data}?created=1`);
+    }
+    router.refresh();
   }
 
   function pointSelect(game: Game, side: Side) {
@@ -55,6 +106,7 @@ export default function EntryForm({ games }: { games: Game[] }) {
       <select
         aria-label={`Confidence points for ${teamName} in the ${game.bowl_name}`}
         value={value}
+        disabled={locked}
         onChange={(e) => assign(game.id, side, e.target.value)}
         style={{ marginTop: 6, padding: 6, minWidth: 72, fontSize: 16 }}
       >
@@ -96,6 +148,19 @@ export default function EntryForm({ games }: { games: Game[] }) {
 
   return (
     <>
+      <label style={{ display: "block", marginBottom: 16 }}>
+        Entry name
+        <input
+          value={label}
+          disabled={locked}
+          onChange={(e) => {
+            setLabel(e.target.value);
+            setUnsaved(true);
+          }}
+          style={{ display: "block", marginTop: 6, padding: 8, fontSize: 16, width: "100%", maxWidth: 320 }}
+        />
+      </label>
+
       <p
         role="status"
         style={{
@@ -135,9 +200,26 @@ export default function EntryForm({ games }: { games: Game[] }) {
         </table>
       </div>
 
-      <p style={{ fontSize: 14, color: "#555" }}>
-        Saving isn't connected yet. Your picks reset if you reload the page.
-      </p>
+      {!locked && (
+        <div style={{ position: "sticky", bottom: 0, background: "white", padding: "12px 0", borderTop: "1px solid #eee" }}>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            style={{ padding: "10px 20px", fontSize: 16 }}
+          >
+            {saving ? "Saving…" : isComplete ? "Save entry" : "Save draft"}
+          </button>
+          {unsaved && !saving && (
+            <span style={{ marginLeft: 12, color: "#8a5a00" }}>You have unsaved changes.</span>
+          )}
+          {message && (
+            <p role="alert" style={{ margin: "8px 0 0", color: message.isError ? "crimson" : "#1e6b34" }}>
+              {message.text}
+            </p>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -1,75 +1,82 @@
-import { createClient } from "@/lib/supabase-server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import EntryForm, { type Game } from "./EntryForm";
+import { createClient } from "@/lib/supabase-server";
+import { getPool } from "@/lib/pool";
 
-// Kickoff times are stored in UTC; everyone sees them in Eastern time.
-const kickoffFormat = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-export default async function EntryPage() {
+export default async function MyEntriesPage() {
   const supabase = await createClient();
 
-  // 1. Only signed-in users can see this page.
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  if (!user) {
-    redirect("/login");
-  }
+  const { games, locked, lockLabel } = await getPool(supabase);
 
-  // 2. Load the pool games, earliest kickoff first.
-  const { data: games, error } = await supabase
-    .from("games")
-    .select("id, bowl_name, kickoff_at, tv_network, favorite_team, underdog_team, spread")
-    .eq("in_pool", true)
-    .order("kickoff_at", { ascending: true });
+  // Row-level security means this only ever returns the signed-in user's entries.
+  // picks(count) asks the database to count each entry's picks for us.
+  const { data: entries, error } = await supabase
+    .from("entries")
+    .select("id, entry_label, created_at, picks(count)")
+    .order("created_at", { ascending: true });
 
-  if (error) {
-    return (
-      <main style={{ maxWidth: 720, margin: "60px auto", padding: 24 }}>
-        <h1>Your entry</h1>
-        <p style={{ color: "crimson" }}>Games could not be loaded: {error.message}</p>
-      </main>
-    );
-  }
-
-  if (!games || games.length === 0) {
-    return (
-      <main style={{ maxWidth: 720, margin: "60px auto", padding: 24 }}>
-        <h1>Your entry</h1>
-        <p>The bowl slate hasn't been posted yet. Check back after Selection Day.</p>
-      </main>
-    );
-  }
-
-  // 3. Format kickoff times here on the server, so every participant sees
-  //    Eastern time regardless of their own device's time zone.
-  const formGames: Game[] = games.map((game) => ({
-    id: game.id,
-    bowl_name: game.bowl_name,
-    kickoff_label: kickoffFormat.format(new Date(game.kickoff_at)),
-    tv_network: game.tv_network,
-    favorite_team: game.favorite_team,
-    underdog_team: game.underdog_team,
-    spread: Number(game.spread),
-  }));
+  const gameCount = games.length;
 
   return (
     <main style={{ maxWidth: 820, margin: "60px auto", padding: 24 }}>
-      <h1>Your entry</h1>
-      <p>
-        {formGames.length} games in this year's pool. Put a confidence number
-        under the team you're taking. Each number from 1 to {formGames.length} is
-        used once.
-      </p>
-      <EntryForm games={formGames} />
+      <h1>Your entries</h1>
+
+      {gameCount === 0 ? (
+        <p>The bowl slate hasn't been posted yet. Check back after Selection Day.</p>
+      ) : (
+        <p>
+          {gameCount} games in this year's pool.{" "}
+          {locked
+            ? "Entries are locked because the first game has kicked off."
+            : `Entries lock at the first kickoff: ${lockLabel} ET.`}
+        </p>
+      )}
+
+      {error && <p style={{ color: "crimson" }}>Your entries could not be loaded: {error.message}</p>}
+
+      {entries && entries.length > 0 ? (
+        <table style={{ width: "100%", borderCollapse: "collapse", margin: "16px 0" }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "2px solid #ccc" }}>
+              <th style={{ padding: 8 }}>Entry</th>
+              <th style={{ padding: 8 }}>Picks</th>
+              <th style={{ padding: 8 }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => {
+              const pickCount = (entry.picks as { count: number }[])[0]?.count ?? 0;
+              const complete = gameCount > 0 && pickCount === gameCount;
+              return (
+                <tr key={entry.id} style={{ borderBottom: "1px solid #eee" }}>
+                  <td style={{ padding: 8 }}>
+                    <Link href={`/entry/${entry.id}`}>{entry.entry_label}</Link>
+                  </td>
+                  <td style={{ padding: 8 }}>
+                    {pickCount} of {gameCount}
+                  </td>
+                  <td style={{ padding: 8, color: complete ? "#1e6b34" : "#8a5a00" }}>
+                    {complete ? "Complete" : locked ? "Incomplete" : "Draft"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        !error && gameCount > 0 && <p>You don't have any entries yet.</p>
+      )}
+
+      {!locked && gameCount > 0 && (
+        <p>
+          <Link href="/entry/new">Start a new entry</Link>
+        </p>
+      )}
     </main>
   );
 }
